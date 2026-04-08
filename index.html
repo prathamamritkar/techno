@@ -93,6 +93,15 @@
       animation: spin 0.9s linear infinite;
     }
 
+    .loading-card.error {
+      border-color: rgba(255, 95, 109, 0.65);
+      box-shadow: 0 14px 36px rgba(255, 47, 61, 0.2);
+    }
+
+    .loading-card.error .spinner {
+      display: none;
+    }
+
     @keyframes spin {
       to {
         transform: rotate(360deg);
@@ -102,7 +111,29 @@
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/ngokevin/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
+  <script>
+    if (window.AFRAME && !AFRAME.components.billboard) {
+      // Keep labels oriented toward the active camera.
+      AFRAME.registerComponent("billboard", {
+        init: function () {
+          this.worldCameraPosition = new THREE.Vector3();
+          this.localCameraPosition = new THREE.Vector3();
+        },
+        tick: function () {
+          const sceneCamera = this.el.sceneEl && this.el.sceneEl.camera;
+          const parent = this.el.object3D.parent;
+          if (!sceneCamera || !parent) {
+            return;
+          }
+
+          sceneCamera.getWorldPosition(this.worldCameraPosition);
+          this.localCameraPosition.copy(this.worldCameraPosition);
+          parent.worldToLocal(this.localCameraPosition);
+          this.el.object3D.lookAt(this.localCameraPosition);
+        }
+      });
+    }
+  </script>
 </head>
 <body>
   <div id="loading-screen" role="status" aria-live="polite">
@@ -144,7 +175,7 @@
           align="center"
           width="1.35"
           position="0 0.23 0"
-          look-at="[camera]"
+          billboard
         ></a-text>
       </a-entity>
 
@@ -160,7 +191,7 @@
           align="center"
           width="1.2"
           position="0 0.15 0"
-          look-at="[camera]"
+          billboard
         ></a-text>
       </a-entity>
 
@@ -177,7 +208,7 @@
           align="center"
           width="1.34"
           position="0 0.15 0"
-          look-at="[camera]"
+          billboard
         ></a-text>
       </a-entity>
     </a-nft>
@@ -188,10 +219,15 @@
   <script>
     (function () {
       const loadingScreen = document.getElementById("loading-screen");
+      const loadingCard = loadingScreen.querySelector(".loading-card");
       const statusText = document.getElementById("loading-status");
       const scene = document.querySelector("a-scene");
       const marker = document.getElementById("article-marker");
       let loadingHidden = false;
+      let cameraReady = false;
+      let cameraErrored = false;
+      let feedProbe = null;
+      let observedFeed = null;
 
       function setStatus(message) {
         statusText.textContent = message;
@@ -205,47 +241,85 @@
         loadingScreen.classList.add("hidden");
       }
 
-      function waitForCameraFeed() {
+      function markCameraReady(message) {
+        if (cameraReady || cameraErrored) {
+          return;
+        }
+
+        cameraReady = true;
+        setStatus(message || "Camera ready. Point at the article marker to start verification.");
+        hideLoading();
+      }
+
+      function markCameraError(message) {
+        if (cameraReady || cameraErrored) {
+          return;
+        }
+
+        cameraErrored = true;
+        loadingCard.classList.add("error");
+        setStatus(message || "Camera access failed. Open over HTTPS and allow camera permission.");
+      }
+
+      function checkCameraFeed() {
         const feed = document.querySelector("video");
         if (!feed) {
-          return false;
+          return;
         }
+
+        if (feed.readyState >= 2) {
+          markCameraReady();
+          return;
+        }
+
+        if (observedFeed === feed) {
+          return;
+        }
+
+        observedFeed = feed;
 
         const onReady = function () {
           if (feed.readyState >= 2) {
-            setStatus("Camera ready. Point at the article marker to start verification.");
-            hideLoading();
-            feed.removeEventListener("loadeddata", onReady);
-            feed.removeEventListener("canplay", onReady);
+            markCameraReady();
           }
         };
 
-        if (feed.readyState >= 2) {
-          onReady();
-          return true;
-        }
-
-        feed.addEventListener("loadeddata", onReady);
-        feed.addEventListener("canplay", onReady);
-        return true;
+        feed.addEventListener("loadeddata", onReady, { once: true });
+        feed.addEventListener("canplay", onReady, { once: true });
       }
 
-      const probe = window.setInterval(function () {
-        if (waitForCameraFeed()) {
-          window.clearInterval(probe);
+      feedProbe = window.setInterval(function () {
+        if (cameraReady || cameraErrored) {
+          window.clearInterval(feedProbe);
+          return;
         }
-      }, 160);
+
+        checkCameraFeed();
+      }, 200);
 
       window.setTimeout(function () {
-        window.clearInterval(probe);
-        if (!loadingHidden) {
-          setStatus("Still waiting for camera. Allow permissions and refresh if needed.");
-          hideLoading();
+        if (!cameraReady && !cameraErrored) {
+          const secureHint = window.isSecureContext
+            ? "Still waiting for camera. Allow permissions and keep this tab active."
+            : "Camera is blocked on insecure pages. Use HTTPS or localhost, then allow permission.";
+          setStatus(secureHint);
         }
-      }, 12000);
+      }, 10000);
 
       scene.addEventListener("loaded", function () {
-        setStatus("AR scene loaded. Starting camera stream...");
+        if (!cameraReady && !cameraErrored) {
+          setStatus("AR scene loaded. Starting camera stream...");
+        }
+      });
+
+      scene.addEventListener("camera-init", function () {
+        markCameraReady();
+      });
+
+      scene.addEventListener("camera-error", function (event) {
+        const detail = event && event.detail ? event.detail : {};
+        const reason = detail.message || detail.error || "Camera access failed. Open over HTTPS and allow camera permission.";
+        markCameraError(reason);
       });
 
       marker.addEventListener("markerFound", function () {
@@ -253,7 +327,9 @@
       });
 
       marker.addEventListener("markerLost", function () {
-        setStatus("Marker lost. Re-frame the printed article.");
+        if (!cameraErrored) {
+          setStatus("Marker lost. Re-frame the printed article.");
+        }
       });
     })();
   </script>
