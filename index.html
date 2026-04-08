@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Spatial-Trust WebAR Prototype</title>
+
+  <style>
+    :root {
+      --bg-0: #06070a;
+      --bg-1: #0f1b2e;
+      --accent: #f6d365;
+      --text: #f4f7ff;
+      --muted: #a8b4cc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
+    }
+
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 25%, rgba(246, 211, 101, 0.2), transparent 40%),
+        radial-gradient(circle at 82% 78%, rgba(48, 92, 173, 0.25), transparent 42%),
+        linear-gradient(145deg, var(--bg-0), var(--bg-1));
+      transition: opacity 320ms ease, visibility 320ms ease;
+    }
+
+    #loading-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-card {
+      width: min(90vw, 420px);
+      padding: 28px 24px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(6, 10, 19, 0.74);
+      backdrop-filter: blur(8px);
+      text-align: left;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    .kicker {
+      margin: 0;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    h1 {
+      margin: 10px 0 8px;
+      font-size: clamp(22px, 4.3vw, 30px);
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .status {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      min-height: 2.9em;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      margin: 18px 0 0;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.26);
+      border-top-color: #fff;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ngokevin/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
+</head>
+<body>
+  <div id="loading-screen" role="status" aria-live="polite">
+    <div class="loading-card">
+      <p class="kicker">Spatial-Trust</p>
+      <h1>Initializing camera and tracker</h1>
+      <p id="loading-status" class="status">Allow camera permission when prompted, then point at the printed article.</p>
+      <div class="spinner" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <a-scene
+    embedded
+    vr-mode-ui="enabled: false"
+    renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true; colorManagement: true"
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+  >
+    <a-nft
+      id="article-marker"
+      type="nft"
+      url="./markers/article"
+      smooth="true"
+      smoothCount="10"
+      smoothTolerance="0.01"
+      smoothThreshold="5"
+      emitevents="true"
+    >
+      <!-- Tune each position value to align with your exact printed layout. -->
+      <a-entity position="-0.33 0.22 0">
+        <a-plane
+          width="0.42"
+          height="0.28"
+          material="wireframe: true; color: #ff2f3d; opacity: 0.96; transparent: true"
+          animation__pulse="property: scale; from: 1 1 1; to: 1.08 1.08 1; dir: alternate; dur: 820; loop: true; easing: easeInOutSine"
+        ></a-plane>
+        <a-text
+          value="[ WARNING: DEEPFAKE SIGNATURE DETECTED ]"
+          color="#ff5f6d"
+          align="center"
+          width="1.35"
+          position="0 0.23 0"
+          look-at="[camera]"
+        ></a-text>
+      </a-entity>
+
+      <a-entity position="0 -0.08 0">
+        <a-plane
+          width="0.78"
+          height="0.16"
+          material="wireframe: true; color: #2add84; opacity: 0.96; transparent: true"
+        ></a-plane>
+        <a-text
+          value="[ VERIFIED: HUMAN ORIGIN ]"
+          color="#6dffc0"
+          align="center"
+          width="1.2"
+          position="0 0.15 0"
+          look-at="[camera]"
+        ></a-text>
+      </a-entity>
+
+      <a-entity position="0 -0.33 0">
+        <a-plane
+          width="0.78"
+          height="0.16"
+          material="wireframe: true; color: #ffd43b; opacity: 0.82; transparent: true"
+          animation__glow="property: material.opacity; from: 0.55; to: 1.0; dir: alternate; dur: 760; loop: true; easing: easeInOutSine"
+        ></a-plane>
+        <a-text
+          value="[ ALERT: HIGH AI-PERPLEXITY SCORE ]"
+          color="#ffe684"
+          align="center"
+          width="1.34"
+          position="0 0.15 0"
+          look-at="[camera]"
+        ></a-text>
+      </a-entity>
+    </a-nft>
+
+    <a-entity id="camera" camera></a-entity>
+  </a-scene>
+
+  <script>
+    (function () {
+      const loadingScreen = document.getElementById("loading-screen");
+      const statusText = document.getElementById("loading-status");
+      const scene = document.querySelector("a-scene");
+      const marker = document.getElementById("article-marker");
+      let loadingHidden = false;
+
+      function setStatus(message) {
+        statusText.textContent = message;
+      }
+
+      function hideLoading() {
+        if (loadingHidden) {
+          return;
+        }
+        loadingHidden = true;
+        loadingScreen.classList.add("hidden");
+      }
+
+      function waitForCameraFeed() {
+        const feed = document.querySelector("video");
+        if (!feed) {
+          return false;
+        }
+
+        const onReady = function () {
+          if (feed.readyState >= 2) {
+            setStatus("Camera ready. Point at the article marker to start verification.");
+            hideLoading();
+            feed.removeEventListener("loadeddata", onReady);
+            feed.removeEventListener("canplay", onReady);
+          }
+        };
+
+        if (feed.readyState >= 2) {
+          onReady();
+          return true;
+        }
+
+        feed.addEventListener("loadeddata", onReady);
+        feed.addEventListener("canplay", onReady);
+        return true;
+      }
+
+      const probe = window.setInterval(function () {
+        if (waitForCameraFeed()) {
+          window.clearInterval(probe);
+        }
+      }, 160);
+
+      window.setTimeout(function () {
+        window.clearInterval(probe);
+        if (!loadingHidden) {
+          setStatus("Still waiting for camera. Allow permissions and refresh if needed.");
+          hideLoading();
+        }
+      }, 12000);
+
+      scene.addEventListener("loaded", function () {
+        setStatus("AR scene loaded. Starting camera stream...");
+      });
+
+      marker.addEventListener("markerFound", function () {
+        setStatus("Marker locked. Spatial threat overlays are active.");
+      });
+
+      marker.addEventListener("markerLost", function () {
+        setStatus("Marker lost. Re-frame the printed article.");
+      });
+    })();
+  </script>
+</body>
+</html>
