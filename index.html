@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Spatial-Trust WebAR Prototype</title>
+  <link rel="icon" href="data:,">
 
   <style>
     :root {
@@ -109,7 +110,7 @@
     }
   </style>
 
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
   <script>
     if (window.AFRAME && !AFRAME.components.billboard) {
@@ -154,7 +155,6 @@
     <a-nft
       id="article-marker"
       type="nft"
-      url="./markers/article"
       smooth="true"
       smoothCount="10"
       smoothTolerance="0.01"
@@ -223,9 +223,11 @@
       const statusText = document.getElementById("loading-status");
       const scene = document.querySelector("a-scene");
       const marker = document.getElementById("article-marker");
+      const markerSuffixes = [".fset", ".fset3", ".iset"];
       let loadingHidden = false;
       let cameraReady = false;
       let cameraErrored = false;
+      let markerAssetsReady = null;
       let feedProbe = null;
       let observedFeed = null;
 
@@ -247,8 +249,18 @@
         }
 
         cameraReady = true;
-        setStatus(message || "Camera ready. Point at the article marker to start verification.");
-        hideLoading();
+        if (markerAssetsReady === false) {
+          setStatus("Camera ready, but marker files are missing. Add NFT files and redeploy.");
+          return;
+        }
+
+        if (markerAssetsReady === true) {
+          setStatus(message || "Camera ready. Point at the article marker to start verification.");
+          hideLoading();
+          return;
+        }
+
+        setStatus("Camera ready. Verifying marker assets...");
       }
 
       function markCameraError(message) {
@@ -259,6 +271,139 @@
         cameraErrored = true;
         loadingCard.classList.add("error");
         setStatus(message || "Camera access failed. Open over HTTPS and allow camera permission.");
+      }
+
+      function markMarkerError(message) {
+        markerAssetsReady = false;
+        loadingCard.classList.add("error");
+        setStatus(message);
+      }
+
+      function markMarkerReady() {
+        markerAssetsReady = true;
+        if (cameraReady && !cameraErrored) {
+          setStatus("Camera and marker assets ready. Point at the printed article.");
+          hideLoading();
+        }
+      }
+
+      function resolveMarkerUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const override = params.get("marker");
+        if (override) {
+          if (override.startsWith("http://") || override.startsWith("https://")) {
+            console.log("Using absolute marker override:", override);
+            return override;
+          } else if (override.startsWith("/")) {
+            console.log("Using root-absolute marker override:", override);
+            return override;  // Return as-is if already root-absolute
+          } else {
+            console.log("Using relative marker override:", override);
+            return new URL(override, window.location.href).href;
+          }
+        }
+
+        // Worker XMLHttpRequest resolves root-absolute paths (/path) more reliably than
+        // full absolute URLs. Try root-absolute first.
+        window.__MARKER_URL_VARIANTS = {
+          rootAbsolute: "/markers/article",
+          absolute: location.origin + "/markers/article",
+          relative: "markers/article"
+        };
+
+        // Primary: use root-absolute URL which worker XMLHttpRequest handles better
+        const markerUrl = "/markers/article";
+        console.log("Resolved marker URL variants:", window.__MARKER_URL_VARIANTS);
+        console.log("Using primary (root-absolute):", markerUrl);
+        return markerUrl;
+      }
+
+      async function verifyMarkerAssets(markerBaseUrl) {
+        const checks = [];
+
+        for (const suffix of markerSuffixes) {
+          const assetUrl = markerBaseUrl + suffix;
+          try {
+            let response = await fetch(assetUrl, { method: "HEAD", cache: "no-store" });
+
+            // Some static servers don't support HEAD. Fall back once to GET.
+            if (response.status === 405) {
+              response = await fetch(assetUrl, { method: "GET", cache: "no-store" });
+            }
+
+            const check = { assetUrl: assetUrl, ok: response.ok, status: response.status };
+            checks.push(check);
+            console.log("Marker asset check:", assetUrl, "->", response.status);
+
+            if (!check.ok) {
+              break;
+            }
+          } catch (error) {
+            checks.push({ assetUrl: assetUrl, ok: false, status: 0, error: error });
+            console.error("Marker asset fetch error:", assetUrl, error);
+            break;
+          }
+        }
+
+        return checks;
+      }
+
+      async function initMarkerAssets() {
+        const markerUrl = resolveMarkerUrl();
+        console.log("1. Resolved marker base URL:", markerUrl);
+        setStatus("Checking marker files...");
+
+        const checks = await verifyMarkerAssets(markerUrl);
+        const failed = checks.filter(function (item) {
+          return !item.ok;
+        });
+
+        if (failed.length > 0) {
+          const statusInfo = failed[0].status ? "HTTP " + failed[0].status : "network error";
+          markMarkerError(
+            "Marker load failed (" + statusInfo + "). Ensure article.fset, article.fset3, and article.iset exist in markers/ on GitHub Pages."
+          );
+          console.error("Missing marker assets:", failed.map(function (item) { return item.assetUrl; }));
+          return;
+        }
+
+        console.log("2. Preflight checks passed.");
+        console.log("3. About to setAttribute 'url' on marker element.");
+        console.log("   Primary URL to set:", markerUrl);
+        console.log("   Marker element id:", marker.id);
+        
+        // Store the URL for inspection
+        window.__DEBUG_MARKER_URL = markerUrl;
+        window.__DEBUG_MARKER_ELEMENT = marker;
+        
+        try {
+          // Log before setAttribute
+          const beforeUrl = marker.getAttribute("url");
+          console.log("   [Before setAttribute] getAttribute('url'):", beforeUrl);
+          
+          // Use requestAnimationFrame to ensure DOM is ready
+          requestAnimationFrame(function() {
+            marker.setAttribute("url", markerUrl);
+            
+            // Log after setAttribute - immediately check what was set
+            const afterUrl = marker.getAttribute("url");
+            console.log("   [After setAttribute] getAttribute('url'):", afterUrl);
+            console.log("   URLs match:", afterUrl === markerUrl);
+            
+            // Try to access through components to verify AR.js received it
+            if (marker.components && marker.components.nft) {
+              console.log("   NFT component data.url:", marker.components.nft.data && marker.components.nft.data.url);
+            }
+            
+            console.log("4. setAttribute completed. Waiting for ARToolkit to process URL...");
+          });
+          
+          setStatus("Marker files verified. Point at the article when ready.");
+          markMarkerReady();
+        } catch (error) {
+          console.error("Error setting marker URL:", error);
+          markMarkerError("Failed to initialize marker: " + (error.message || error));
+        }
       }
 
       function checkCameraFeed() {
@@ -307,9 +452,13 @@
       }, 10000);
 
       scene.addEventListener("loaded", function () {
+        console.log("Scene loaded event fired.");
         if (!cameraReady && !cameraErrored) {
           setStatus("AR scene loaded. Starting camera stream...");
         }
+        // Initialize marker assets after scene is fully loaded
+        console.log("Initializing marker assets after scene load...");
+        initMarkerAssets();
       });
 
       scene.addEventListener("camera-init", function () {
@@ -322,11 +471,36 @@
         markCameraError(reason);
       });
 
+      // Trace marker entity lifecycle for debugging AR.js NFT loading.
+      marker.addEventListener("loaded", function () {
+        console.log("Marker entity loaded.");
+      });
+
+      marker.addEventListener("componentinitialized", function (event) {
+        console.log("Marker component initialized:", event.detail.name);
+        if (event.detail.name === "nft") {
+          console.log("NFT component initialized. Current URL:", marker.getAttribute("url"));
+        }
+      });
+
+      marker.addEventListener("componentchanged", function (event) {
+        if (event.detail.name === "url") {
+          console.log("Marker URL attribute changed to:", event.detail.newData);
+        }
+      });
+
+      // Listen for errors that AR.js might dispatch
+      marker.addEventListener("error", function (event) {
+        console.error("Marker error event:", event);
+      });
+
       marker.addEventListener("markerFound", function () {
+        console.log("★ MARKER FOUND EVENT FIRED ★ - Tracking is active");
         setStatus("Marker locked. Spatial threat overlays are active.");
       });
 
       marker.addEventListener("markerLost", function () {
+        console.log("Marker lost - tracking stopped");
         if (!cameraErrored) {
           setStatus("Marker lost. Re-frame the printed article.");
         }
