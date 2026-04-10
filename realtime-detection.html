@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Real-Time AI Detection Overlay</title>
+  <style>
+    :root {
+      --bg-0: #06070a;
+      --accent: #f6d365;
+      --text: #f4f7ff;
+      --success: #2add84;
+      --error: #ff2f3d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    video#arjs-video {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      z-index: 0 !important;
+    }
+
+    canvas#detection-overlay {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 5 !important;
+      cursor: crosshair;
+    }
+
+    #stats-overlay {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(6, 7, 10, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      padding: 16px;
+      z-index: 100;
+      font-family: "Courier New", monospace;
+      font-size: 12px;
+      color: var(--text);
+      min-width: 280px;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 0;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-row:last-child {
+      border-bottom: none;
+    }
+
+    .stat-label {
+      color: var(--text);
+    }
+
+    .stat-value {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .stat-value.high {
+      color: var(--success);
+    }
+
+    .stat-value.low {
+      color: var(--error);
+    }
+
+    #detection-status {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(6, 7, 10, 0.9);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 16px 24px;
+      z-index: 100;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      text-align: center;
+      min-width: 300px;
+      backdrop-filter: blur(10px);
+    }
+
+    .status-real-photo {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .status-ai-generated {
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    .status-analyzing {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    #confidence-bar {
+      position: fixed;
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      z-index: 100;
+      overflow: hidden;
+    }
+
+    #confidence-fill {
+      width: 100%;
+      height: 0%;
+      background: linear-gradient(180deg, var(--error), var(--accent), var(--success));
+      transition: height 0.2s ease;
+    }
+
+    .confidence-label {
+      position: absolute;
+      right: 50px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(246, 211, 101, 0.3);
+      color: var(--text);
+      border: 1px solid rgba(246, 211, 101, 0.5);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: rgba(246, 211, 101, 0.5);
+      transform: translateY(-2px);
+    }
+
+    button.active {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+
+    .detection-box {
+      position: absolute;
+      border: 2px solid;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .box-ai {
+      border-color: var(--error);
+      background: rgba(255, 47, 61, 0.15);
+    }
+
+    .box-real {
+      border-color: var(--success);
+      background: rgba(42, 221, 132, 0.15);
+    }
+
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  
+  <canvas id="detection-overlay"></canvas>
+  
+  <div id="stats-overlay">
+    <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); font-weight: 700; color: var(--accent);">
+      📊 Real-Time Analysis
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Status:</span>
+      <span class="stat-value" id="status-text">Initializing...</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Detection Type:</span>
+      <span class="stat-value" id="type-text">N/A</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Confidence:</span>
+      <span class="stat-value" id="conf-text">0%</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Feature Density:</span>
+      <span class="stat-value" id="density-text">0%</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Sharpness:</span>
+      <span class="stat-value" id="sharp-text">0%</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Frame Rate:</span>
+      <span class="stat-value" id="fps-text">0 fps</span>
+    </div>
+    <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 10px; color: var(--accent);">
+      Analyzing camera feed in real-time
+    </div>
+  </div>
+
+  <div id="detection-status" class="status-analyzing">
+    🔄 Initializing detection...
+  </div>
+
+  <div style="position: fixed; bottom: 20px; right: 20px; z-index: 100; text-align: right; font-size: 11px; color: var(--text); opacity: 0.6;">
+    <div>Real-Time AI Detection</div>
+    <div>Green = Real Content</div>
+    <div>Red = AI Detection</div>
+  </div>
+
+  <div id="controls">
+    <button id="toggle-boxes" class="active">Show Boxes</button>
+    <button id="toggle-stats">Hide Stats</button>
+  </div>
+
+  <div id="confidence-bar">
+    <div id="confidence-fill"></div>
+    <div class="confidence-label">Confidence</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("detection-overlay");
+    const ctx = canvas.getContext("2d");
+    
+    let videoElement = null;
+    let analysisRunning = false;
+    let showBoxes = true;
+    let showStats = true;
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+
+    // Wait for AR.js video to appear
+    function waitForVideo() {
+      videoElement = document.getElementById("arjs-video") || document.querySelector("video");
+      
+      if (!videoElement) {
+        console.log("Waiting for video element...");
+        setTimeout(waitForVideo, 100);
+        return;
+      }
+
+      console.log("✓ Video element found, starting analysis...");
+      console.log("Video dimensions:", videoElement.videoWidth, "x", videoElement.videoHeight);
+      
+      // Give video a moment to start playing
+      if (videoElement.readyState < 2) {
+        console.log("Video not ready yet, waiting...");
+        setTimeout(waitForVideo, 500);
+        return;
+      }
+      
+      resizeCanvas();
+      startAnalysis();
+      
+      window.addEventListener("resize", resizeCanvas);
+    }
+
+    function startAnalysis() {
+      console.log("📊 Starting real-time analysis...");
+      analysisRunning = true;
+      analyzeFrame();
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      console.log("Canvas resized to:", canvas.width, "x", canvas.height);
+    }
+
+    // Real-time feature analysis (similar to test-images.html but continuous)
+    function analyzeFrame() {
+      if (!videoElement || videoElement.paused || videoElement.readyState < 2) {
+        requestAnimationFrame(analyzeFrame);
+        return;
+      }
+
+      try {
+        // Create temporary canvas for frame analysis
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = Math.min(videoElement.videoWidth || 640, 640);
+        tempCanvas.height = Math.min(videoElement.videoHeight || 480, 480);
+        const tempCtx = tempCanvas.getContext("2d");
+
+        // Draw current video frame
+        try {
+          tempCtx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
+        } catch (e) {
+          console.warn("Cannot draw video (CORS or timing issue):", e.message);
+          requestAnimationFrame(analyzeFrame);
+          return;
+        }
+
+        // Analyze features in this frame
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const analysis = performFeatureAnalysis(imageData);
+
+        // Determine content type
+        const isAI = analysis.detectionScore < 40;
+        const confidence = isAI ? (100 - analysis.detectionScore) : analysis.detectionScore;
+
+        // Update UI
+        updateStats(analysis, isAI, confidence);
+        drawOverlay(isAI, confidence, analysis);
+
+      } catch (error) {
+        console.error("Analysis error:", error.message);
+      }
+
+      // FPS calculation
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFrameTime >= 1000) {
+        fps = frameCount;
+        frameCount = 0;
+        lastFrameTime = now;
+        document.getElementById("fps-text").textContent = fps + " fps";
+      }
+
+      requestAnimationFrame(analyzeFrame);
+    }
+
+    function performFeatureAnalysis(imageData) {
+      const data = imageData.data;
+      
+      let edgeCount = 0;
+      let cornerCount = 0;
+      let textureVariance = 0;
+      let sharpnessScore = 0;
+
+      // Edge detection
+      for (let i = 4; i < data.length - 4; i += 4) {
+        const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+        const nextBrightness = (data[i+4] + data[i+5] + data[i+6]) / 3;
+        const diff = Math.abs(brightness - nextBrightness);
+        
+        if (diff > 30) edgeCount++;
+        if (diff > 60) sharpnessScore += diff;
+        if (diff > 100) cornerCount++;
+      }
+
+      // Variance calculation
+      const step = 16;
+      const samples = [];
+      for (let i = 0; i < data.length; i += step * 4) {
+        samples.push((data[i] + data[i+1] + data[i+2]) / 3);
+      }
+      
+      const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+      textureVariance = Math.sqrt(
+        samples.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / samples.length
+      );
+
+      // Normalize scores
+      const featureDensity = Math.min((edgeCount / 10000) * 100, 100);
+      const cornerness = Math.min((cornerCount / 1000) * 100, 100);
+      const sharpness = Math.min((sharpnessScore / 50000) * 100, 100);
+      const textureVar = Math.min(textureVariance, 100);
+
+      // Detection score
+      const detectionScore = (
+        featureDensity * 0.35 + 
+        cornerness * 0.35 + 
+        sharpness * 0.2 + 
+        (textureVar / 255 * 100) * 0.1
+      );
+
+      return {
+        featureDensity: Math.round(featureDensity),
+        cornerness: Math.round(cornerness),
+        sharpness: Math.round(sharpness),
+        textureVariance: Math.round(textureVar),
+        detectionScore: Math.round(detectionScore)
+      };
+    }
+
+    function updateStats(analysis, isAI, confidence) {
+      document.getElementById("status-text").textContent = isAI ? "🔴 AI DETECTED" : "🟢 REAL CONTENT";
+      document.getElementById("type-text").textContent = isAI ? "AI-Generated" : "Real/Photo";
+      document.getElementById("conf-text").textContent = Math.round(confidence) + "%";
+      document.getElementById("density-text").textContent = analysis.featureDensity + "%";
+      document.getElementById("sharp-text").textContent = analysis.sharpness + "%";
+
+      const confClass = isAI ? "low" : "high";
+      document.getElementById("conf-text").className = "stat-value " + confClass;
+
+      // Update confidence bar
+      const fillEl = document.getElementById("confidence-fill");
+      fillEl.style.height = confidence + "%";
+      fillEl.style.background = isAI 
+        ? "linear-gradient(180deg, var(--error), var(--accent))"
+        : "linear-gradient(180deg, var(--accent), var(--success))";
+
+      // Update detection status
+      const statusEl = document.getElementById("detection-status");
+      if (isAI) {
+        statusEl.textContent = "🔴 AI-GENERATED CONTENT DETECTED (" + Math.round(confidence) + "% confidence)";
+        statusEl.className = "status-ai-generated";
+      } else {
+        statusEl.textContent = "🟢 REAL CONTENT (" + Math.round(confidence) + "% confidence)";
+        statusEl.className = "status-real-photo";
+      }
+    }
+
+    function drawOverlay(isAI, confidence, analysis) {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!showBoxes) return;
+
+      // Draw large central indicator
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const maxRadius = 150;
+      const radius = (confidence / 100) * maxRadius;
+
+      // Draw concentric circles
+      ctx.strokeStyle = isAI 
+        ? `rgba(255, 47, 61, ${0.3 + confidence / 200})`
+        : `rgba(42, 221, 132, ${0.3 + confidence / 200})`;
+      ctx.lineWidth = 3;
+      
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius - (i * 20), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Draw corner indicators
+      drawCornerIndicator(isAI, confidence);
+
+      // Draw top banner
+      drawBanner(isAI, confidence, analysis);
+
+      // Draw feature visualization
+      drawFeatureVisualization(analysis, isAI);
+    }
+
+    function drawCornerIndicator(isAI, confidence) {
+      const size = 60;
+      const color = isAI ? "#ff2f3d" : "#2add84";
+      const alpha = 0.3 + (confidence / 200);
+
+      // Top-left
+      ctx.strokeStyle = `rgba(${isAI ? "255, 47, 61" : "42, 221, 132"}, ${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(20, 20, size, size);
+
+      // Top-right
+      ctx.strokeRect(canvas.width - size - 20, 20, size, size);
+
+      // Bottom-left
+      ctx.strokeRect(20, canvas.height - size - 20, size, size);
+
+      // Bottom-right
+      ctx.strokeRect(canvas.width - size - 20, canvas.height - size - 20, size, size);
+    }
+
+    function drawBanner(isAI, confidence, analysis) {
+      const text = isAI 
+        ? "⚠️ AI-GENERATED CONTENT" 
+        : "✓ AUTHENTIC CONTENT";
+      
+      const color = isAI ? "#ff2f3d" : "#2add84";
+      const bgColor = isAI 
+        ? "rgba(255, 47, 61, 0.2)" 
+        : "rgba(42, 221, 132, 0.2)";
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(20, canvas.height - 120, canvas.width - 40, 100);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(20, canvas.height - 120, canvas.width - 40, 100);
+
+      ctx.fillStyle = color;
+      ctx.font = "bold 20px 'Space Grotesk'";
+      ctx.textAlign = "center";
+      ctx.fillText(text, canvas.width / 2, canvas.height - 80);
+
+      ctx.font = "14px 'Courier New'";
+      ctx.fillText(
+        `Confidence: ${Math.round(confidence)}%  |  Sharpness: ${analysis.sharpness}%  |  Features: ${analysis.featureDensity}%`,
+        canvas.width / 2,
+        canvas.height - 55
+      );
+    }
+
+    function drawFeatureVisualization(analysis, isAI) {
+      // Draw feature density bars on sides
+      const barWidth = 30;
+      const barHeight = 200;
+      const gap = 10;
+
+      // Left side - features
+      const x1 = 20;
+      const y1 = (canvas.height - barHeight) / 2;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.fillRect(x1, y1, barWidth, barHeight);
+
+      const fillHeight = (analysis.featureDensity / 100) * barHeight;
+      ctx.fillStyle = isAI ? "rgba(255, 47, 61, 0.4)" : "rgba(42, 221, 132, 0.4)";
+      ctx.fillRect(x1, y1 + (barHeight - fillHeight), barWidth, fillHeight);
+
+      ctx.strokeStyle = isAI ? "#ff2f3d" : "#2add84";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x1, y1, barWidth, barHeight);
+
+      // Right side - sharpness
+      const x2 = canvas.width - barWidth - 20;
+      const y2 = (canvas.height - barHeight) / 2;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.fillRect(x2, y2, barWidth, barHeight);
+
+      const sharpFill = (analysis.sharpness / 100) * barHeight;
+      ctx.fillStyle = isAI ? "rgba(255, 47, 61, 0.4)" : "rgba(42, 221, 132, 0.4)";
+      ctx.fillRect(x2, y2 + (barHeight - sharpFill), barWidth, sharpFill);
+
+      ctx.strokeStyle = isAI ? "#ff2f3d" : "#2add84";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x2, y2, barWidth, barHeight);
+    }
+
+    // UI Controls
+    document.getElementById("toggle-boxes").addEventListener("click", function() {
+      showBoxes = !showBoxes;
+      this.classList.toggle("active");
+      this.textContent = showBoxes ? "Hide Boxes" : "Show Boxes";
+    });
+
+    document.getElementById("toggle-stats").addEventListener("click", function() {
+      showStats = !showStats;
+      document.getElementById("stats-overlay").style.display = showStats ? "block" : "none";
+      this.classList.toggle("active");
+      this.textContent = showStats ? "Hide Stats" : "Show Stats";
+    });
+
+    // Start the system
+    setTimeout(waitForVideo, 500);
+  </script>
+</body>
+</html>

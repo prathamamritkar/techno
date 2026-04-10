@@ -29,6 +29,47 @@
       font-family: "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
     }
 
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 0;
+    }
+
+    video#arjs-video {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      z-index: 0 !important;
+      pointer-events: none !important;
+    }
+
+    /* Detection overlay canvas */
+    canvas#detection-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 100;
+      cursor: crosshair;
+      pointer-events: none;
+      background: transparent;
+      display: block;
+    }
+
+    a-scene canvas {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: transparent !important;
+      z-index: 1 !important;
+    }
+
     #loading-screen {
       position: fixed;
       inset: 0;
@@ -47,6 +88,116 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+    }
+
+    #status-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(6, 7, 10, 0.9);
+      border: 2px solid rgba(246, 211, 101, 0.4);
+      border-radius: 12px;
+      padding: 16px;
+      z-index: 50;
+      max-width: 380px;
+      font-family: "Space Grotesk", "Courier New", monospace;
+      font-size: 12px;
+      color: var(--text);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 6px 0;
+      padding: 4px 0;
+      align-items: center;
+    }
+
+    .status-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .status-value {
+      color: var(--accent);
+      font-weight: 700;
+      font-family: "Courier New", monospace;
+    }
+
+    .status-value.success {
+      color: #2add84;
+    }
+
+    .status-value.error {
+      color: #ff2f3d;
+    }
+
+    .status-value.warning {
+      color: #ffd43b;
+    }
+
+    #marker-detection-event {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(42, 221, 132, 0.95);
+      color: #000;
+      padding: 40px 60px;
+      border-radius: 16px;
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 20px 60px rgba(42, 221, 132, 0.4);
+      animation: popIn 0.4s ease;
+    }
+
+    #marker-detection-event.show {
+      display: block;
+    }
+
+    #marker-detection-event.lost {
+      background: rgba(255, 47, 61, 0.95);
+      animation: popOut 0.4s ease;
+    }
+
+    @keyframes popIn {
+      from {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+      }
+      to {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes popOut {
+      from {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+      to {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0;
+      }
+    }
+
+    @keyframes popOutRed {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+        background: rgba(255, 47, 61, 0.95);
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(0.7);
+        opacity: 0;
+        background: rgba(255, 47, 61, 0.2);
+      }
     }
 
     .loading-card {
@@ -146,71 +297,130 @@
     </div>
   </div>
 
+  <!-- Detection highlight canvas overlay -->
+  <canvas id="detection-canvas"></canvas>
+
+  <div id="status-panel" style="display: none;">
+    <div style="font-weight: 700; color: var(--accent); margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+      📊 System Status
+    </div>
+    <div class="status-row">
+      <span class="status-label">Camera:</span>
+      <span class="status-value" id="camera-status">⏳ Initializing</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Marker:</span>
+      <span class="status-value" id="marker-status">⏳ Loading</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Detection:</span>
+      <span class="status-value" id="detection-status">⏳ Idle</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Confidence:</span>
+      <span class="status-value" id="confidence-status">0%</span>
+    </div>
+    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: var(--muted);">
+      <div id="last-event">Ready for marker detection</div>
+      <div id="fps-display" style="margin-top: 4px;">FPS: 0</div>
+    </div>
+  </div>
+
+  <div id="marker-detection-event"></div>
+
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
     renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true; colorManagement: true"
-    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; cameraResolution: [1280, 960];"
   >
     <a-nft
       id="article-marker"
       type="nft"
+      url="http://127.0.0.1:5500/markers/article"
       smooth="true"
-      smoothCount="10"
-      smoothTolerance="0.01"
-      smoothThreshold="5"
+      smooth-count="10"
+      smooth-tolerance="0.01"
+      smooth-threshold="5"
+      arjs-anchor="minConfidence: 0.2"
       emitevents="true"
     >
-      <!-- Tune each position value to align with your exact printed layout. -->
-      <a-entity position="-0.33 0.22 0">
+      <a-entity position="-120 120 -60" rotation="90 0 180">
         <a-plane
-          width="0.42"
-          height="0.28"
-          material="wireframe: true; color: #ff2f3d; opacity: 0.96; transparent: true"
+          width="220"
+          height="66"
+          material="shader: flat; color: #ff2f3d; opacity: 0.94; transparent: true; side: double; depthTest: false; depthWrite: false"
           animation__pulse="property: scale; from: 1 1 1; to: 1.08 1.08 1; dir: alternate; dur: 820; loop: true; easing: easeInOutSine"
         ></a-plane>
         <a-text
           value="[ WARNING: DEEPFAKE SIGNATURE DETECTED ]"
-          color="#ff5f6d"
+          color="#ffffff"
           align="center"
-          width="1.35"
-          position="0 0.23 0"
+          width="4.5"
+          position="0 18 0"
+          scale="4 4 4"
           billboard
         ></a-text>
       </a-entity>
 
-      <a-entity position="0 -0.08 0">
+      <a-entity position="0 10 -60" rotation="90 0 180">
         <a-plane
-          width="0.78"
-          height="0.16"
-          material="wireframe: true; color: #2add84; opacity: 0.96; transparent: true"
+          width="280"
+          height="58"
+          material="shader: flat; color: #2add84; opacity: 0.94; transparent: true; side: double; depthTest: false; depthWrite: false"
         ></a-plane>
         <a-text
           value="[ VERIFIED: HUMAN ORIGIN ]"
-          color="#6dffc0"
+          color="#eafff3"
           align="center"
-          width="1.2"
-          position="0 0.15 0"
+          width="4.5"
+          position="0 16 0"
+          scale="4 4 4"
           billboard
         ></a-text>
       </a-entity>
 
-      <a-entity position="0 -0.33 0">
+      <a-entity position="0 -120 -60" rotation="90 0 180">
         <a-plane
-          width="0.78"
-          height="0.16"
-          material="wireframe: true; color: #ffd43b; opacity: 0.82; transparent: true"
+          width="280"
+          height="58"
+          material="shader: flat; color: #ffd43b; opacity: 0.94; transparent: true; side: double; depthTest: false; depthWrite: false"
           animation__glow="property: material.opacity; from: 0.55; to: 1.0; dir: alternate; dur: 760; loop: true; easing: easeInOutSine"
         ></a-plane>
         <a-text
           value="[ ALERT: HIGH AI-PERPLEXITY SCORE ]"
-          color="#ffe684"
+          color="#fff1a8"
           align="center"
-          width="1.34"
-          position="0 0.15 0"
+          width="4.5"
+          position="0 16 0"
+          scale="4 4 4"
           billboard
         ></a-text>
       </a-entity>
+
+      <!-- LARGE BRIGHT DETECTION OVERLAY - HIGHLY VISIBLE -->
+      <a-plane
+        id="detection-highlight"
+        position="0 0 -60"
+        rotation="90 0 0"
+        width="500"
+        height="320"
+        material="shader: flat; color: #00ff00; opacity: 0.35; transparent: true; side: double; depthTest: false; depthWrite: false"
+        visible="false"
+        class="detection-overlay"
+      ></a-plane>
+
+      <!-- LARGE RED OVERLAY FOR AI DETECTION -->
+      <a-plane
+        id="detection-highlight-red"
+        position="0 0 -60"
+        rotation="90 0 0"
+        width="500"
+        height="320"
+        material="shader: flat; color: #ff0000; opacity: 0.35; transparent: true; side: double; depthTest: false; depthWrite: false"
+        visible="false"
+        class="detection-overlay"
+      ></a-plane>
     </a-nft>
 
     <a-entity id="camera" camera></a-entity>
@@ -222,7 +432,7 @@
       const loadingCard = loadingScreen.querySelector(".loading-card");
       const statusText = document.getElementById("loading-status");
       const scene = document.querySelector("a-scene");
-      const marker = document.getElementById("article-marker");
+      let marker = document.getElementById("article-marker");  // Static marker is already in the DOM.
       const markerSuffixes = [".fset", ".fset3", ".iset"];
       let loadingHidden = false;
       let cameraReady = false;
@@ -230,9 +440,38 @@
       let markerAssetsReady = null;
       let feedProbe = null;
       let observedFeed = null;
+      let feedPlayRequested = false;
 
       function setStatus(message) {
         statusText.textContent = message;
+      }
+
+      function updateStatusPanel(fieldId, value, type) {
+        const el = document.getElementById(fieldId);
+        if (el) {
+          el.textContent = value;
+          el.className = "status-value " + (type || "");
+        }
+      }
+
+      function showMarkerDetectionEvent(message, isLost) {
+        const popup = document.getElementById("marker-detection-event");
+        if (!popup) return;
+        
+        popup.textContent = message;
+        popup.className = "marker-event-popup " + (isLost ? "lost" : "found");
+        popup.style.display = "block";
+        
+        // Play animation and auto-hide after 2 seconds
+        setTimeout(() => {
+          popup.style.animation = "none";
+          void popup.offsetWidth; // Trigger reflow
+          popup.style.animation = isLost ? "popOutRed 0.6s ease" : "popIn 0.4s ease";
+        }, 100);
+        
+        setTimeout(() => {
+          popup.style.display = "none";
+        }, 2500);
       }
 
       function hideLoading() {
@@ -249,6 +488,10 @@
         }
 
         cameraReady = true;
+        
+        // Update status panel
+        updateStatusPanel("camera-status", "✅ Ready", "success");
+        
         if (markerAssetsReady === false) {
           setStatus("Camera ready, but marker files are missing. Add NFT files and redeploy.");
           return;
@@ -256,11 +499,11 @@
 
         if (markerAssetsReady === true) {
           setStatus(message || "Camera ready. Point at the article marker to start verification.");
-          hideLoading();
-          return;
+        } else {
+          setStatus("Camera ready. Verifying marker assets...");
         }
 
-        setStatus("Camera ready. Verifying marker assets...");
+        hideLoading();
       }
 
       function markCameraError(message) {
@@ -277,6 +520,10 @@
         markerAssetsReady = false;
         loadingCard.classList.add("error");
         setStatus(message);
+
+        if (cameraReady && !cameraErrored) {
+          hideLoading();
+        }
       }
 
       function markMarkerReady() {
@@ -284,8 +531,78 @@
         if (cameraReady && !cameraErrored) {
           setStatus("Camera and marker assets ready. Point at the printed article.");
           hideLoading();
+          
+          // Show status panel with initial values
+          const statusPanel = document.getElementById("status-panel");
+          if (statusPanel) {
+            statusPanel.style.display = "block";
+            updateStatusPanel("camera-status", "✅ Ready", "success");
+            updateStatusPanel("marker-status", "✅ Loaded", "success");
+            updateStatusPanel("detection-status", "⏳ Waiting", "");
+            updateStatusPanel("last-event", "Ready to detect marker...");
+          }
         }
       }
+
+      function syncCameraLayerVisibility() {
+        const html = document.documentElement;
+        if (html) {
+          html.style.width = "100%";
+          html.style.height = "100%";
+          html.style.overflow = "hidden";
+          html.style.background = "#000";
+        }
+
+        const body = document.body;
+        if (body) {
+          body.style.position = "fixed";
+          body.style.inset = "0";
+          body.style.width = "100vw";
+          body.style.height = "100vh";
+          body.style.margin = "0";
+          body.style.overflow = "hidden";
+          body.style.background = "#000";
+        }
+
+        const renderer = scene && scene.renderer;
+        if (renderer && typeof renderer.setClearColor === "function") {
+          renderer.setClearColor(new THREE.Color(0x000000), 0);
+          if (typeof renderer.setClearAlpha === "function") {
+            renderer.setClearAlpha(0);
+          }
+          if (typeof renderer.setPixelRatio === "function") {
+            renderer.setPixelRatio(window.devicePixelRatio || 1);
+          }
+          if (typeof renderer.setSize === "function") {
+            renderer.setSize(window.innerWidth, window.innerHeight, false);
+          }
+        }
+
+        const canvas = renderer && renderer.domElement;
+        if (canvas) {
+          canvas.style.position = "fixed";
+          canvas.style.inset = "0";
+          canvas.style.width = "100vw";
+          canvas.style.height = "100vh";
+          canvas.style.background = "transparent";
+          canvas.style.zIndex = "1";
+        }
+
+        const feed = document.getElementById("arjs-video");
+        if (feed) {
+          feed.style.position = "fixed";
+          feed.style.inset = "0";
+          feed.style.width = "100vw";
+          feed.style.height = "100vh";
+          feed.style.objectFit = "cover";
+          feed.style.zIndex = "0";
+          feed.style.pointerEvents = "none";
+        }
+      }
+
+      window.addEventListener("resize", function () {
+        syncCameraLayerVisibility();
+      });
 
       function resolveMarkerUrl() {
         const params = new URLSearchParams(window.location.search);
@@ -295,27 +612,22 @@
             console.log("Using absolute marker override:", override);
             return override;
           } else if (override.startsWith("/")) {
-            console.log("Using root-absolute marker override:", override);
-            return override;  // Return as-is if already root-absolute
+            // Root-absolute: resolve to full URL for worker compatibility
+            console.log("Using root-absolute marker override, resolving to full URL:", override);
+            return location.origin + override;
           } else {
             console.log("Using relative marker override:", override);
             return new URL(override, window.location.href).href;
           }
         }
 
-        // Worker XMLHttpRequest resolves root-absolute paths (/path) more reliably than
-        // full absolute URLs. Try root-absolute first.
-        window.__MARKER_URL_VARIANTS = {
-          rootAbsolute: "/markers/article",
-          absolute: location.origin + "/markers/article",
-          relative: "markers/article"
-        };
-
-        // Primary: use root-absolute URL which worker XMLHttpRequest handles better
-        const markerUrl = "/markers/article";
-        console.log("Resolved marker URL variants:", window.__MARKER_URL_VARIANTS);
-        console.log("Using primary (root-absolute):", markerUrl);
-        return markerUrl;
+        // AR.js worker XMLHttpRequest requires full absolute URLs with protocol and origin.
+        // Root-absolute paths don't work reliably in worker context.
+        const absoluteUrl = location.origin + "/markers/article";
+        console.log("Resolved absolute marker URL:", absoluteUrl);
+        console.log("  origin:", location.origin);
+        console.log("  href:", location.href);
+        return absoluteUrl;
       }
 
       async function verifyMarkerAssets(markerBaseUrl) {
@@ -348,10 +660,34 @@
         return checks;
       }
 
-      async function initMarkerAssets() {
+      async function initMarkerAssetsLegacy() {
         const markerUrl = resolveMarkerUrl();
         console.log("1. Resolved marker base URL:", markerUrl);
         setStatus("Checking marker files...");
+
+        const markerElement = document.getElementById("article-marker");
+        if (!markerElement) {
+          markMarkerError("Marker element missing from the page.");
+          return;
+        }
+
+        console.log("✓ Marker element found:", markerElement.tagName, markerElement.id);
+        
+        marker = markerElement;
+        attachMarkerEventListeners(markerElement);
+        
+        // Add console logging to verify event attachment
+        console.log("✓ Event listeners attached to marker element");
+
+        window.addEventListener("arjs-nft-loaded", function () {
+          console.log("✓✓✓ arjs-nft-loaded global event fired! Marker fully loaded! ✓✓✓");
+          markMarkerReady();
+        }, { once: true });
+
+        window.addEventListener("arjs-nft-error", function (event) {
+          console.error("★ arjs-nft-error event fired!");
+          console.error("  Error:", event.detail);
+        }, { once: true });
 
         const checks = await verifyMarkerAssets(markerUrl);
         const failed = checks.filter(function (item) {
@@ -368,48 +704,243 @@
         }
 
         console.log("2. Preflight checks passed.");
-        console.log("3. About to setAttribute 'url' on marker element.");
-        console.log("   Primary URL to set:", markerUrl);
-        console.log("   Marker element id:", marker.id);
-        
-        // Store the URL for inspection
-        window.__DEBUG_MARKER_URL = markerUrl;
-        window.__DEBUG_MARKER_ELEMENT = marker;
+        console.log("3. Recreating marker element with URL attribute set...");
         
         try {
-          // Log before setAttribute
-          const beforeUrl = marker.getAttribute("url");
-          console.log("   [Before setAttribute] getAttribute('url'):", beforeUrl);
+          // Remove the existing marker element
+          const oldMarker = document.getElementById("article-marker");
+          if (oldMarker) {
+            console.log("   Removing old marker element");
+            oldMarker.parentNode.removeChild(oldMarker);
+          }
           
-          // Use requestAnimationFrame to ensure DOM is ready
-          requestAnimationFrame(function() {
-            marker.setAttribute("url", markerUrl);
+          // Create new marker element
+          // <a-nft> is a custom element provided by AR.js
+          const newMarker = document.createElement("a-nft");
+          newMarker.id = "article-marker";
+          
+          // Set attributes using KEBAB-CASE (not camelCase)
+          // AR.js a-nft element expects kebab-case HTML attributes
+          console.log("   Setting a-nft attributes (kebab-case)...");
+          
+          newMarker.setAttribute("type", "nft");           // Required for AR.js
+          newMarker.setAttribute("url", markerUrl);         // CRITICAL: URL without file extensions
+          newMarker.setAttribute("smooth", "true");         // Enable smoothing
+          newMarker.setAttribute("smooth-count", "10");     // Was: smoothCount (WRONG)
+          newMarker.setAttribute("smooth-tolerance", "0.01"); // Was: smoothTolerance (WRONG)
+          newMarker.setAttribute("smooth-threshold", "5");  // Was: smoothThreshold (WRONG)
+          newMarker.setAttribute("emitevents", "true");     // Enable markerFound/Lost events
+          newMarker.setAttribute("arjs-anchor", "minConfidence: 0.2");
+          
+          console.log("   ✓ All attributes set:");
+          console.log("     type=", newMarker.getAttribute("type"));
+          console.log("     url=", newMarker.getAttribute("url"));
+          console.log("     smooth=", newMarker.getAttribute("smooth"));
+          console.log("     smooth-count=", newMarker.getAttribute("smooth-count"));
+          console.log("     emitevents=", newMarker.getAttribute("emitevents"));          
+          // Debug: Log all attributes on the element
+          console.log("   All element attributes:");
+          for (let i = 0; i < newMarker.attributes.length; i++) {
+            const attr = newMarker.attributes[i];
+            console.log("     " + attr.name + "=" + attr.value);
+          }          
+          // Recreate the child overlay entities
+          const overlays = [
+            { position: "-120 120 -60", width: "220", height: "66", color: "#ff2f3d", text: "[ WARNING: DEEPFAKE SIGNATURE DETECTED ]", textColor: "#ffffff", textPos: "0 18 0" },
+            { position: "0 10 -60", width: "280", height: "58", color: "#2add84", text: "[ VERIFIED: HUMAN ORIGIN ]", textColor: "#eafff3", textPos: "0 16 0" },
+            { position: "0 -120 -60", width: "280", height: "58", color: "#ffd43b", text: "[ ALERT: HIGH AI-PERPLEXITY SCORE ]", textColor: "#fff1a8", textPos: "0 16 0", hasGlow: true }
+          ];
+          
+          overlays.forEach(function(overlay) {
+            const entity = document.createElement("a-entity");
+            entity.setAttribute("position", overlay.position);
+            entity.setAttribute("rotation", "90 0 180");
             
-            // Log after setAttribute - immediately check what was set
-            const afterUrl = marker.getAttribute("url");
-            console.log("   [After setAttribute] getAttribute('url'):", afterUrl);
-            console.log("   URLs match:", afterUrl === markerUrl);
-            
-            // Try to access through components to verify AR.js received it
-            if (marker.components && marker.components.nft) {
-              console.log("   NFT component data.url:", marker.components.nft.data && marker.components.nft.data.url);
+            const plane = document.createElement("a-plane");
+            plane.setAttribute("width", overlay.width);
+            plane.setAttribute("height", overlay.height);
+            plane.setAttribute("material", "shader: flat; color: " + overlay.color + "; opacity: " + (overlay.hasGlow ? "0.88" : "0.94") + "; transparent: true; side: double; depthTest: false; depthWrite: false");
+            if (overlay.hasGlow) {
+              plane.setAttribute("animation__glow", "property: material.opacity; from: 0.55; to: 1.0; dir: alternate; dur: 760; loop: true; easing: easeInOutSine");
+            } else if (overlay.position === "-120 120 -60") {
+              plane.setAttribute("animation__pulse", "property: scale; from: 1 1 1; to: 1.08 1.08 1; dir: alternate; dur: 820; loop: true; easing: easeInOutSine");
             }
             
-            console.log("4. setAttribute completed. Waiting for ARToolkit to process URL...");
+            const text = document.createElement("a-text");
+            text.setAttribute("value", overlay.text);
+            text.setAttribute("color", overlay.textColor);
+            text.setAttribute("align", "center");
+            text.setAttribute("width", "4.5");
+            text.setAttribute("position", overlay.textPos);
+            text.setAttribute("scale", "4 4 4");
+            text.setAttribute("billboard", "");
+            
+            entity.appendChild(plane);
+            entity.appendChild(text);
+            newMarker.appendChild(entity);
           });
           
-          setStatus("Marker files verified. Point at the article when ready.");
-          markMarkerReady();
+          // Insert into DOM
+          scene.insertBefore(newMarker, document.getElementById("camera"));
+          console.log("   ✓ Marker element inserted into DOM");
+          console.log("   Attributes: url=" + markerUrl);
+          
+          // Update the global marker reference now that it exists
+          marker = newMarker;
+          
+          // Attach event listeners BEFORE setting up the loaded handlers
+          attachMarkerEventListeners(newMarker);
+          
+          // CRITICAL: Attach arjs-nft-loaded listener BEFORE OR IMMEDIATELY AFTER DOM insertion
+          // The worker may start immediately after DOM insertion
+          console.log("   Listening for arjs-nft-loaded event...");
+          const nftLoadedHandler = function() {
+            console.log("✓✓✓ arjs-nft-loaded global event fired! Marker fully loaded! ✓✓✓");
+            setStatus("Marker ready. Point at the article when you're in frame.");
+            markMarkerReady();
+          };
+          window.addEventListener("arjs-nft-loaded", nftLoadedHandler, { once: true });
+          
+          // Also listen for arjs-nft-error event if it exists
+          window.addEventListener("arjs-nft-error", function(event) {
+            console.error("★ arjs-nft-error event fired!");
+            console.error("  Error:", event.detail);
+          });
+          
+          // Listen for error events that might indicate network issues
+          window.addEventListener("error", function(event) {
+            if (event.message && (event.message.includes("marker") || event.message.includes("article"))) {
+              console.error("! Global error related to marker:", event.message);
+              console.error("  File:", event.filename);
+              console.error("  Line:", event.lineno);
+            }
+          });
+          
+          // Listen for unhandledrejection in case worker throws a promise rejection
+          window.addEventListener("unhandledrejection", function(event) {
+            console.error("! Unhandled promise rejection:", event.reason);
+            if (event.reason && event.reason.message && event.reason.message.includes("marker")) {
+              console.error("  (Related to marker loading)");
+            }
+          });
+          
+          // Listen for element's loaded event
+          newMarker.addEventListener("loaded", function() {
+            console.log("   Element 'loaded' event fired");
+            if (newMarker.components) {
+              console.log("   Current components:", Object.keys(newMarker.components).join(", "));
+            }
+          });
+          
+          // RAF check for debugging and potential manual trigger
+          requestAnimationFrame(function() {
+            console.log("   [RAF] Marker element fully inserted, AR.js processing...");
+            
+            // Log all attributes again after insertion
+            console.log("   Element attributes after DOM insertion:");
+            for (let i = 0; i < newMarker.attributes.length; i++) {
+              const attr = newMarker.attributes[i];
+              console.log("     " + attr.name + "=" + attr.value);
+            }
+            
+            if (newMarker.components) {
+              console.log("   Available components:", Object.keys(newMarker.components).join(", "));
+              
+              // Detailed inspection of each component
+              Object.keys(newMarker.components).forEach(function(compName) {
+                const comp = newMarker.components[compName];
+                console.log("   [Component: " + compName + "]");
+                console.log("     data:", JSON.stringify(comp.data || {}));
+                if (comp.el) {
+                  console.log("     el:", comp.el.tagName);
+                }
+              });
+              
+              if (newMarker.components['arjs-anchor']) {
+                const arjsAnchor = newMarker.components['arjs-anchor'];
+                console.log("   [arjs-anchor - DETAILED]");
+                console.log("     schema keys:", Object.keys(arjsAnchor.schema || {}));
+                console.log("     data.url:", arjsAnchor.data.url);
+                console.log("     data.descriptorsUrl:", arjsAnchor.data.descriptorsUrl);
+                console.log("     data type:", typeof arjsAnchor.data.url);
+              }
+            } else {
+              console.log("   ! No components property yet");
+            }
+            
+            // Check if there's a global ARController we can inspect
+            if (window.AFRAME && window.AFRAME.scenes && window.AFRAME.scenes[0]) {
+              const scene = window.AFRAME.scenes[0];
+              console.log("   [A-Scene inspection]");
+              console.log("     Scene systems:", Object.keys(scene.systems || {}).join(", "));
+              
+              if (scene.systems.arjs) {
+                console.log("     arjs system found");
+                const arjsSystem = scene.systems.arjs;
+                console.log("     arjsSystem.arController:", !!arjsSystem.arController);
+                console.log("     arjsSystem.isReady:", !!arjsSystem.isReady);
+                
+                // Try to get information about loaded markers
+                if (arjsSystem.arController && arjsSystem.arController.getNFTMarkers) {
+                  console.log("     getNFTMarkers method found");
+                  try {
+                    const nftMarkers = arjsSystem.arController.getNFTMarkers();
+                    console.log("     Loaded NFT markers:", nftMarkers);
+                  } catch (e) {
+                    console.log("     Error getting NFT markers:", e.message);
+                  }
+                } else {
+                  console.log("     ! arController not available");
+                  console.log("     arjsSystem object keys:", Object.keys(arjsSystem).join(", "));
+                  
+                  // Try to look for markercontrols
+                  if (arjsSystem.markerControls) {
+                    console.log("     markerControls found:", arjsSystem.markerControls.length, "items");
+                  }
+                  if (arjsSystem.markerRoot) {
+                    console.log("     markerRoot found");
+                  }
+                }
+              }
+            }
+          });
+          
         } catch (error) {
-          console.error("Error setting marker URL:", error);
+          console.error("Error recreating marker element:", error);
           markMarkerError("Failed to initialize marker: " + (error.message || error));
         }
       }
 
+      if (marker) {
+        attachMarkerEventListeners(marker);
+      } else {
+        markMarkerError("Marker element missing from the page.");
+      }
+
+      window.addEventListener("arjs-nft-loaded", function () {
+        console.log("✓✓✓ arjs-nft-loaded global event fired! Marker fully loaded! ✓✓✓");
+        markMarkerReady();
+      }, { once: true });
+
+      window.addEventListener("arjs-nft-error", function (event) {
+        console.error("★ arjs-nft-error event fired!");
+        console.error("  Error:", event.detail);
+      }, { once: true });
+
       function checkCameraFeed() {
-        const feed = document.querySelector("video");
+        const feed = document.getElementById("arjs-video") || document.querySelector("video");
         if (!feed) {
+          syncCameraLayerVisibility();
           return;
+        }
+
+        syncCameraLayerVisibility();
+
+        if (!feedPlayRequested && typeof feed.play === "function" && feed.paused) {
+          feedPlayRequested = true;
+          feed.play().catch(function (error) {
+            console.warn("Unable to autoplay AR.js camera feed yet:", error);
+          });
         }
 
         if (feed.readyState >= 2) {
@@ -451,8 +982,432 @@
         }
       }, 10000);
 
+      function debugMarkerState() {
+        console.log("\n====== MARKER STATE DEBUG DUMP ======");
+        
+        if (!marker) {
+          console.log("marker variable: NULL");
+          return;
+        }
+        
+        console.log("marker element:", marker.tagName, marker.id);
+        console.log("marker.hasAttribute('url'):", marker.hasAttribute("url"));
+        console.log("marker.getAttribute('url'):", marker.getAttribute("url"));
+        
+        console.log("\nAll attributes:");
+        for (let i = 0; i < marker.attributes.length; i++) {
+          const attr = marker.attributes[i];
+          console.log("  " + attr.name + "=" + attr.value);
+        }
+        
+        console.log("\nComponents:");
+        if (marker.components) {
+          Object.keys(marker.components).forEach(function(compName) {
+            const comp = marker.components[compName];
+            console.log("  [" + compName + "]");
+            console.log("    data:", JSON.stringify(comp.data || {}));
+          });
+        } else {
+          console.log("  (no components)");
+        }
+        
+        console.log("\nmarkerAssetsReady:", markerAssetsReady);
+        console.log("cameraReady:", cameraReady);
+        
+        const scene = document.querySelector("a-scene");
+        if (scene && scene.systems && scene.systems.arjs) {
+          console.log("\narjs system found");
+          const arjsSystem = scene.systems.arjs;
+          console.log("  arjsSystem.arController:", !!arjsSystem.arController);
+          if (arjsSystem.arController) {
+            console.log("  arController.getNFTMarkers:", typeof arjsSystem.arController.getNFTMarkers);
+          }
+        }
+        
+        console.log("====== END DEBUG DUMP ======\n");
+      }
+      
+      // Make debug function global for console access
+      window.debugMarkerState = debugMarkerState;
+
+      // Request HD camera resolution before AR.js initializes
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = function(constraints) {
+          // Request HD resolution (1280x720 or higher)
+          const enhancedConstraints = Object.assign({}, constraints, {
+            video: Object.assign({}, constraints.video || {}, {
+              width: { min: 640, ideal: 1280, max: 1920 },
+              height: { min: 480, ideal: 720, max: 1080 },
+              facingMode: "environment"
+            })
+          });
+          console.log("📷 Requesting HD camera:", enhancedConstraints.video);
+          return originalGetUserMedia(enhancedConstraints);
+        };
+      }
+
+      // ============================================
+      // CANVAS OVERLAY DETECTION SYSTEM
+      // Real-time highlights on camera feed
+      // ============================================
+
+      let detectionCanvas = null;
+      let detectionCtx = null;
+      let videoElement = null;
+      let isAnalyzing = false;
+      let cachedEdgeCanvas = null;
+      let cachedEdgeCtx = null;
+
+      function initializeDetectionCanvas() {
+        console.log("🎨 Initializing detection canvas overlay...");
+        
+        detectionCanvas = document.getElementById("detection-canvas");
+        if (!detectionCanvas) {
+          console.error("❌ Detection canvas element not found!");
+          return;
+        }
+
+        detectionCtx = detectionCanvas.getContext("2d", { willReadFrequently: true });
+        
+        // Pre-create cached canvas for edge detection
+        cachedEdgeCanvas = document.createElement("canvas");
+        cachedEdgeCtx = cachedEdgeCanvas.getContext("2d", { willReadFrequently: true });
+        
+        // Set canvas size to match window
+        function resizeCanvas() {
+          detectionCanvas.width = window.innerWidth;
+          detectionCanvas.height = window.innerHeight;
+          console.log("📐 Canvas resized to:", detectionCanvas.width, "x", detectionCanvas.height);
+        }
+        
+        resizeCanvas();
+        window.addEventListener("resize", resizeCanvas);
+        
+        // Find video element
+        setTimeout(() => {
+          videoElement = document.querySelector("video");
+          if (videoElement) {
+            console.log("✓ Video element found, starting detection loop");
+            startDetectionLoop();
+          } else {
+            console.log("⏳ Video not ready yet, retrying...");
+            setTimeout(initializeDetectionCanvas, 500);
+          }
+        }, 500);
+      }
+
+      function startDetectionLoop() {
+        if (!videoElement || !detectionCtx || isAnalyzing) return;
+        
+        function analyzeFrame() {
+          if (!videoElement || videoElement.paused) {
+            requestAnimationFrame(analyzeFrame);
+            return;
+          }
+
+          try {
+            // Clear canvas
+            detectionCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+
+            // Get video dimensions
+            const videoWidth = videoElement.videoWidth || 1280;
+            const videoHeight = videoElement.videoHeight || 960;
+            const canvasWidth = detectionCanvas.width;
+            const canvasHeight = detectionCanvas.height;
+
+            // Use cached canvas for edge detection
+            cachedEdgeCanvas.width = Math.floor(videoWidth / 4);
+            cachedEdgeCanvas.height = Math.floor(videoHeight / 4);
+            cachedEdgeCtx.drawImage(videoElement, 0, 0, cachedEdgeCanvas.width, cachedEdgeCanvas.height);
+
+            const edgeData = cachedEdgeCtx.getImageData(0, 0, cachedEdgeCanvas.width, cachedEdgeCanvas.height);
+            const edges = edgeData.data;
+
+            // Detect regions with high contrast (text/images)
+            let regions = detectHighContrastRegions(edges, cachedEdgeCanvas.width, cachedEdgeCanvas.height);
+            
+            // Remove overlapping regions to clean up rendering
+            // regions = removeOverlappingRegions(regions);  // DISABLED - simplify
+            
+            // Draw detection boxes on main canvas
+            let boxCount = 0;
+            let drawnBoxes = 0;
+            let skippedBoxes = [];
+            
+            // Calculate scale factors once (needed for final log)
+            const scaleX = canvasWidth / videoWidth;
+            const scaleY = canvasHeight / videoHeight;
+            
+            regions.forEach((region, idx) => {
+              boxCount++;
+              
+              const x = region.x * 4 * scaleX;
+              const y = region.y * 4 * scaleY;
+              const w = region.width * 4 * scaleX;
+              const h = region.height * 4 * scaleY;
+
+              // Only draw if visible on canvas
+              if (x + w > 0 && x < canvasWidth && y + h > 0 && y < canvasHeight && w > 2 && h > 2) {
+                // Determine color: Green for real, Red for AI
+                const confidence = region.confidence || 50;
+                const isAI = confidence < 40;
+                
+                const boxColor = isAI ? "rgba(255, 0, 0, 0.3)" : "rgba(0, 255, 0, 0.3)";
+                const borderColor = isAI ? "#ff3333" : "#33ff33";
+                const label = isAI ? "AI" : "✓";
+
+                // Draw filled semi-transparent box
+                detectionCtx.fillStyle = boxColor;
+                detectionCtx.fillRect(x, y, w, h);
+
+                // Draw bright border
+                detectionCtx.strokeStyle = borderColor;
+                detectionCtx.lineWidth = 2;
+                detectionCtx.strokeRect(x, y, w, h);
+
+                // Draw label
+                if (w > 30 && h > 20) {
+                  detectionCtx.fillStyle = borderColor;
+                  detectionCtx.font = "bold 12px Arial";
+                  detectionCtx.fillText(label, x + 4, y + 14);
+                }
+
+                drawnBoxes++;
+              } else {
+                skippedBoxes.push({ reason: "off-canvas", dims: w + "x" + h, pos: Math.round(x) + "," + Math.round(y) });
+              }
+            });
+            
+            if (regions.length > 0) {
+              console.log("🎨 Canvas render: " + drawnBoxes + "/" + boxCount + " boxes drawn | scale(x:" + scaleX.toFixed(3) + " y:" + scaleY.toFixed(3) + ") | canvas:" + canvasWidth + "x" + canvasHeight + " video:" + videoWidth + "x" + videoHeight);
+            }
+
+          } catch (error) {
+            console.error("Detection error:", error);
+          }
+
+          requestAnimationFrame(analyzeFrame);
+        }
+
+        analyzeFrame();
+      }
+
+      function removeOverlappingRegions(regions) {
+        if (regions.length <= 1) return regions;
+
+        // Sort by area (larger first)
+        const sorted = regions.sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const kept = [];
+
+        for (const region of sorted) {
+          let overlaps = false;
+
+          for (const kept_region of kept) {
+            // Check if regions overlap
+            if (
+              region.x < kept_region.x + kept_region.width &&
+              region.x + region.width > kept_region.x &&
+              region.y < kept_region.y + kept_region.height &&
+              region.y + region.height > kept_region.y
+            ) {
+              overlaps = true;
+              break;
+            }
+          }
+
+          if (!overlaps) {
+            kept.push(region);
+          }
+        }
+
+        return kept;
+      }
+
+      function detectHighContrastRegions(imageData, width, height) {
+        // Enterprise-ready: Simple grid-based detection with morphological operations
+        const GRID_SIZE = 12;  // 12x12 pixel cells
+        const grid = [];
+        const activities = [];
+        let activeCount = 0;
+        
+        // Create activity grid - measure local variance
+        for (let y = 0; y < height - GRID_SIZE; y += GRID_SIZE) {
+          for (let x = 0; x < width - GRID_SIZE; x += GRID_SIZE) {
+            let sum = 0;
+            let sumSq = 0;
+            let count = 0;
+
+            // Sample pixels in grid cell
+            for (let py = 0; py < GRID_SIZE; py++) {
+              for (let px = 0; px < GRID_SIZE; px++) {
+                const idx = ((y + py) * width + (x + px)) * 4;
+                const r = imageData[idx];
+                const g = imageData[idx + 1];
+                const b = imageData[idx + 2];
+                const brightness = (r + g + b) / 3;
+                
+                sum += brightness;
+                sumSq += brightness * brightness;
+                count++;
+              }
+            }
+
+            const mean = sum / count;
+            const variance = (sumSq / count) - (mean * mean);
+            const activity = Math.sqrt(Math.max(0, variance));
+            
+            activities.push(activity);
+
+            grid.push({
+              x: x,
+              y: y,
+              activity: activity,
+              active: false  // Will be set after threshold calculation
+            });
+          }
+        }
+
+        // Calculate dynamic threshold based on activity distribution
+        activities.sort((a, b) => b - a);
+        const max = activities[0] || 1;
+        
+        // Find non-zero activities (ignore dead background)
+        const nonZeroActivities = activities.filter(a => a > 0.01);
+        
+        // Use percentiles of LIVE cells only
+        let p80 = 1;  // Fallback
+        if (nonZeroActivities.length > 0) {
+          const p80Idx = Math.floor(nonZeroActivities.length * 0.20);  // Top 20% of live cells
+          p80 = nonZeroActivities[p80Idx] || 1;
+        }
+        
+        // Threshold: 90% of 80th percentile of live cells
+        const threshold = Math.max(0.5, p80 * 0.90);
+        
+        // Mark truly active cells
+        for (let i = 0; i < grid.length; i++) {
+          if (grid[i].activity > threshold) {
+            grid[i].active = true;
+            activeCount++;
+          }
+        }
+
+        console.log("📊 Activity: live=" + nonZeroActivities.length + "/" + activities.length + " cells | max=" + max.toFixed(2) + " p80_live=" + p80.toFixed(2) + " threshold=" + threshold.toFixed(2) + " → " + activeCount + " activated");
+
+        // Dilate: expand active regions
+        const dilated = new Uint8Array(grid.length);
+        const cols = Math.floor(width / GRID_SIZE);
+        const rows = Math.floor(height / GRID_SIZE);
+        let dilateAddCount = 0;
+
+        for (let i = 0; i < grid.length; i++) {
+          if (grid[i].active) {
+            dilated[i] = 1;
+          } else {
+            // Smart dilation: expand into gaps with strong high-activity neighbors
+            let strongNeighbors = 0;
+            const x = i % cols;
+            const y = Math.floor(i / cols);
+            
+            // Check 4-connected neighbors with high activity (gap filling)
+            if (x > 0 && i - 1 < grid.length && grid[i - 1] && grid[i - 1].active && grid[i - 1].activity > threshold * 0.8) strongNeighbors++;
+            if (x < cols - 1 && i + 1 < grid.length && grid[i + 1] && grid[i + 1].active && grid[i + 1].activity > threshold * 0.8) strongNeighbors++;
+            if (y > 0 && i - cols >= 0 && grid[i - cols] && grid[i - cols].active && grid[i - cols].activity > threshold * 0.8) strongNeighbors++;
+            if (y < rows - 1 && i + cols < grid.length && grid[i + cols] && grid[i + cols].active && grid[i + cols].activity > threshold * 0.8) strongNeighbors++;
+            
+            // Only expand if 2+ strong neighbors to connect regions without merging distant ones
+            if (strongNeighbors >= 2) {
+              dilated[i] = 1;
+              dilateAddCount++;
+            }
+          }
+        }
+
+        console.log("🔍 Smart dilation: added", dilateAddCount, "gap-fill cells (requires 2+ strong neighbors)");
+
+        // Extract bounding boxes from dilated regions
+        const visited = new Uint8Array(grid.length);
+        const regions = [];
+        let regionCount = 0;
+        let filteredCount = 0;
+
+        for (let i = 0; i < dilated.length; i++) {
+          if (dilated[i] && !visited[i]) {
+            const region = floodFillGrid(dilated, visited, i, cols, rows, grid);
+            if (region) {
+              regionCount++;
+              // Require minimum 36+ pixels to filter out noise
+              if (region.width >= 24 && region.height >= 24) {
+                regions.push(region);
+                console.log("✓ Region #" + regionCount + ":", region.width + "x" + region.height, "px @(" + region.x + "," + region.y + ") activity=" + region.avgActivity.toFixed(2));
+              } else {
+                filteredCount++;
+              }
+            }
+          }
+        }
+
+        console.log("📦 Regions: found=" + regionCount + " accepted=" + regions.length + " filtered=" + filteredCount);
+        return regions;
+      }
+
+      function floodFillGrid(grid, visited, startIdx, cols, rows, gridCells) {
+        const stack = [startIdx];
+        let minX = startIdx % cols;
+        let maxX = minX;
+        let minY = Math.floor(startIdx / cols);
+        let maxY = minY;
+        let count = 0;
+        let totalActivity = 0;
+
+        while (stack.length > 0) {
+          const idx = stack.pop();
+          if (visited[idx]) continue;
+          if (!grid[idx]) continue;
+
+          visited[idx] = 1;
+          count++;
+          
+          // Track average activity of cells in this region
+          if (gridCells && gridCells[idx]) {
+            totalActivity += gridCells[idx].activity || 0;
+          }
+
+          const x = idx % cols;
+          const y = Math.floor(idx / cols);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+
+          // Add 4-connected neighbors
+          if (x > 0) stack.push(idx - 1);
+          if (x < cols - 1) stack.push(idx + 1);
+          if (y > 0) stack.push(idx - cols);
+          if (y < rows - 1) stack.push(idx + cols);
+        }
+
+        if (count === 0) return null;
+
+        const GRID_SIZE = 12;
+        return {
+          x: minX * GRID_SIZE,
+          y: minY * GRID_SIZE,
+          width: (maxX - minX + 1) * GRID_SIZE,
+          height: (maxY - minY + 1) * GRID_SIZE,
+          confidence: Math.min(100, count * 2),
+          avgActivity: totalActivity / count
+        };
+      }
+
+      // Initialize canvas overlay when page is ready
+      setTimeout(initializeDetectionCanvas, 1000);
+
       scene.addEventListener("loaded", function () {
         console.log("Scene loaded event fired.");
+        syncCameraLayerVisibility();
+        window.dispatchEvent(new Event("resize"));
         if (!cameraReady && !cameraErrored) {
           setStatus("AR scene loaded. Starting camera stream...");
         }
@@ -461,50 +1416,292 @@
         initMarkerAssets();
       });
 
-      scene.addEventListener("camera-init", function () {
+      scene.addEventListener("renderstart", function () {
+        syncCameraLayerVisibility();
+      });
+
+      window.addEventListener("camera-init", function () {
+        syncCameraLayerVisibility();
+        window.dispatchEvent(new Event("resize"));
         markCameraReady();
       });
 
-      scene.addEventListener("camera-error", function (event) {
+      window.addEventListener("camera-error", function (event) {
         const detail = event && event.detail ? event.detail : {};
         const reason = detail.message || detail.error || "Camera access failed. Open over HTTPS and allow camera permission.";
         markCameraError(reason);
       });
 
+      window.addEventListener("arjs-video-loaded", function () {
+        syncCameraLayerVisibility();
+      });
+
+      // Global error handlers for worker and unhandled errors
+      window.addEventListener("error", function(event) {
+        if (event.message && (event.message.includes("loading marker") || event.message.includes("404"))) {
+          console.error("★ WINDOW ERROR (might be from worker):", event.message, event.filename, event.lineno);
+        }
+      });
+      
+      window.addEventListener("unhandledrejection", function(event) {
+        if (event.reason && event.reason.toString && 
+            (event.reason.toString().includes("404") || event.reason.toString().includes("marker"))) {
+          console.error("★ UNHANDLED REJECTION:", event.reason);
+        }
+      });
+
+      function normalizeWorkerRelativeUrl(url) {
+        if (typeof url !== "string") {
+          return url;
+        }
+
+        try {
+          const parsedUrl = new URL(url, window.location.href);
+          if (parsedUrl.origin === window.location.origin) {
+            return parsedUrl.pathname.replace(/^\/+/, "") + parsedUrl.search + parsedUrl.hash;
+          }
+        } catch (error) {
+          return url;
+        }
+
+        return url;
+      }
+      
+      // Intercept Worker creation to log when workers are created
+      const originalWorker = window.Worker;
+      let workerCount = 0;
+      window.Worker = function(scriptURL) {
+        console.log("★ NEW WORKER CREATED #" + (++workerCount) + ", scriptURL:", scriptURL);
+        const worker = new originalWorker(scriptURL);
+        
+        // Wrap postMessage to log what's being sent to the worker
+        const originalPostMessage = worker.postMessage.bind(worker);
+        worker.postMessage = function(msg) {
+          if (msg && msg.type === "init" && typeof msg.marker === "string") {
+            const normalizedMarker = normalizeWorkerRelativeUrl(msg.marker);
+            if (normalizedMarker !== msg.marker) {
+              console.log("☆ Normalizing worker marker URL:", msg.marker, "->", normalizedMarker);
+              msg = Object.assign({}, msg, { marker: normalizedMarker });
+            }
+          }
+          // Only log init and important events, not every frame (process msgs are 60fps spam)
+          if (msg.type !== "process") {
+            console.log("☆ Posting to worker:", msg.type, msg.marker || msg);
+          }
+          return originalPostMessage(msg);
+        };
+        
+        // Listen for worker messages to see what happens
+        worker.onmessage = function(ev) {
+          if (ev.data && ev.data.type === "endLoading") {
+            console.log("🎉 Worker endLoading:", ev.data);
+          } else if (ev.data && ev.data.type === "error") {
+            console.error("❌ Worker error:", ev.data);
+          } else {
+            // console.log("Worker message:", ev.data?.type || ev.data);
+          }
+        };
+        
+        worker.onerror = function(err) {
+          console.error("❌ Worker error event:", err.message, err.filename, err.lineno);
+        };
+        
+        return worker;
+      };
+      
+      // Intercept XMLHttpRequest to log what workers are trying to fetch
+      const OriginalXHR = window.XMLHttpRequest;
+      window.XMLHttpRequest = function() {
+        const xhr = new OriginalXHR();
+        const originalOpen = xhr.open;
+        
+        xhr.open = function(method, url, async, user, pass) {
+          const logUrl = String(url);
+          if (logUrl.includes('marker') || logUrl.includes('article') || logUrl.includes('fset') || logUrl.includes('iset')) {
+            console.log("📡 XHR OPEN:", method, logUrl);
+          }
+          return originalOpen.apply(this, arguments);
+        };
+        
+        const originalSend = xhr.send;
+        xhr.send = function(data) {
+          const self = this;
+          xhr.addEventListener('readystatechange', function() {
+            if (xhr.readyState === 4) {
+              const requestUrl = arguments.callee.caller?.arguments?.[0] || 'unknown';
+              if (self._url?.includes('marker') || self._url?.includes('article') || self._url?.includes('fset')) {
+                console.log("📡 XHR DONE:", self._url, "status:", xhr.status);
+              }
+            }
+          });
+          return originalSend.apply(this, arguments);
+        };
+        
+        return xhr;
+      };
+
       // Trace marker entity lifecycle for debugging AR.js NFT loading.
-      marker.addEventListener("loaded", function () {
-        console.log("Marker entity loaded.");
-      });
+      function attachMarkerEventListeners(markerElement) {
+        console.log("Attaching event listeners to marker element");
+        
+        markerElement.addEventListener("componentinitialized", function (event) {
+          console.log("✓ Component initialized:", event.detail.name);
+          
+          if (event.detail.name === "arjs-anchor") {
+            console.log("  [arjs-anchor initialized]");
+            const comp = event.target.components['arjs-anchor'];
+            console.log("    data:", JSON.stringify(comp.data || {}));
+            console.log("    data.url:", comp.data.url);
+            console.log("    data.descriptorsUrl:", comp.data.descriptorsUrl);
+          }
+          
+          if (event.detail.name === "nft" && markerElement.components.nft) {
+            console.log("  [NFT component initialized!]");
+            console.log("  NFT component data:", markerElement.components.nft.data);
+          }
+        });
 
-      marker.addEventListener("componentinitialized", function (event) {
-        console.log("Marker component initialized:", event.detail.name);
-        if (event.detail.name === "nft") {
-          console.log("NFT component initialized. Current URL:", marker.getAttribute("url"));
+        markerElement.addEventListener("componentchanged", function (event) {
+          console.log("✓ Component changed:", event.detail.name);
+          console.log("  newData:", JSON.stringify(event.detail.newData || {}));
+          console.log("  oldData:", JSON.stringify(event.detail.oldData || {}));
+        });
+        
+        markerElement.addEventListener("componentremoved", function (event) {
+          console.log("! Component removed:", event.detail.name);
+        });
+
+        markerElement.addEventListener("error", function (event) {
+          console.error("★ Marker error event:", event);
+          if (event.detail) {
+            console.error("  Error detail:", event.detail);
+          }
+        });
+        
+        // Listen for any marker-related events
+        ["markerLoaded", "markerloaded", "loaded", "entityloaded"].forEach(function(eventName) {
+          markerElement.addEventListener(eventName, function (event) {
+            console.log("✓✓✓ MARKER EVENT:", eventName, "✓✓✓");
+          });
+        });
+
+        markerElement.addEventListener("markerFound", function (event) {
+          console.log("🟢🟢🟢 MARKERFOOUND EVENT FIRED 🟢🟢🟢");
+          console.log("Event details:", event);
+          console.log("Event target:", event.target);
+          console.log("Event type:", event.type);
+          
+          console.log("★★★ MARKER FOUND - Tracking Active ★★★");
+          setStatus("Marker locked. Spatial threat overlays are active.");
+          
+          // Update UI panel
+          updateStatusPanel("detection", "🟢 FOUND", "success");
+          updateStatusPanel("last-event", "Marker detected at: " + new Date().toLocaleTimeString());
+          
+          // Show big popup
+          showMarkerDetectionEvent("MARKER DETECTED ✓", false);
+          
+          // Make overlay entities visible
+          const overlays = markerElement.querySelectorAll("a-entity");
+          console.log("Found overlay entities:", overlays.length);
+          overlays.forEach((overlay, idx) => {
+            overlay.setAttribute("visible", "true");
+            console.log("Made overlay", idx, "visible");
+          });
+          
+          // Show bright green detection highlight
+          const greenHighlight = document.getElementById("detection-highlight");
+          if (greenHighlight) {
+            greenHighlight.setAttribute("visible", "true");
+            console.log("✓ Green detection overlay SHOWN");
+          } else {
+            console.log("❌ Green detection overlay NOT FOUND");
+          }
+          
+          // Show text labels too
+          const labels = markerElement.querySelectorAll("a-text");
+          console.log("Found text labels:", labels.length);
+          labels.forEach((label, idx) => {
+            label.setAttribute("visible", "true");
+          });
+        });
+
+        markerElement.addEventListener("markerLost", function (event) {
+          console.log("🔴🔴🔴 MARKERLOST EVENT FIRED 🔴🔴🔴");
+          console.log("Event details:", event);
+          
+          console.log("★★★ MARKER LOST - Tracking Stopped ★★★");
+          if (!cameraErrored) {
+            setStatus("Marker lost. Re-frame the printed article.");
+          }
+          
+          // Update UI panel
+          updateStatusPanel("detection", "⏸ Tracking", "warning");
+          updateStatusPanel("last-event", "Marker lost - waiting for re-detection");
+          
+          // Show lost popup
+          showMarkerDetectionEvent("MARKER LOST ✗", true);
+          
+          // Hide overlay entities
+          const overlays = markerElement.querySelectorAll("a-entity");
+          console.log("Hiding overlay entities:", overlays.length);
+          overlays.forEach((overlay, idx) => {
+            overlay.setAttribute("visible", "false");
+            console.log("Hid overlay", idx);
+          });
+          
+          // Hide detection overlays
+          const greenHighlight = document.getElementById("detection-highlight");
+          const redHighlight = document.getElementById("detection-highlight-red");
+          if (greenHighlight) greenHighlight.setAttribute("visible", "false");
+          if (redHighlight) redHighlight.setAttribute("visible", "false");
+          console.log("✓ Detection overlays HIDDEN");
+          
+          // Hide text labels
+          const labels = markerElement.querySelectorAll("a-text");
+          labels.forEach((label) => {
+            label.setAttribute("visible", "false");
+          });
+        });
+        
+        // Watch for attribute mutations
+        console.log("Setting up MutationObserver for attribute changes...");
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes') {
+              console.log("  [Attribute changed]: " + mutation.attributeName + 
+                         " = " + markerElement.getAttribute(mutation.attributeName));
+            }
+          });
+        });
+        
+        observer.observe(markerElement, { attributes: true, attributeOldValue: true });
+      }
+
+      async function initMarkerAssets() {
+        const markerUrl = resolveMarkerUrl();
+        console.log("1. Resolved marker base URL:", markerUrl);
+        setStatus("Checking marker files...");
+
+        const checks = await verifyMarkerAssets(markerUrl);
+        const failed = checks.filter(function (item) {
+          return !item.ok;
+        });
+
+        if (failed.length > 0) {
+          const statusInfo = failed[0].status ? "HTTP " + failed[0].status : "network error";
+          markMarkerError(
+            "Marker load failed (" + statusInfo + "). Ensure article.fset, article.fset3, and article.iset exist in markers/."
+          );
+          console.error("Missing marker assets:", failed.map(function (item) { return item.assetUrl; }));
+          return;
         }
-      });
 
-      marker.addEventListener("componentchanged", function (event) {
-        if (event.detail.name === "url") {
-          console.log("Marker URL attribute changed to:", event.detail.newData);
-        }
-      });
+        console.log("2. Preflight checks passed.");
 
-      // Listen for errors that AR.js might dispatch
-      marker.addEventListener("error", function (event) {
-        console.error("Marker error event:", event);
-      });
-
-      marker.addEventListener("markerFound", function () {
-        console.log("★ MARKER FOUND EVENT FIRED ★ - Tracking is active");
-        setStatus("Marker locked. Spatial threat overlays are active.");
-      });
-
-      marker.addEventListener("markerLost", function () {
-        console.log("Marker lost - tracking stopped");
-        if (!cameraErrored) {
-          setStatus("Marker lost. Re-frame the printed article.");
-        }
-      });
+        setStatus("Marker files verified. Point the printed article at the camera.");
+      }
+      
     })();
   </script>
 </body>
